@@ -15,7 +15,7 @@ The backend is provider-agnostic. Game logic depends on an internal `LlmClient` 
 - Bounded concurrent model calls instead of slow sequential generation
 - Anonymous voting prompts that never expose answer authors
 - Deterministic vote fallbacks that can be reproduced in tests
-- Optional disabled, in-memory, or atomic Redis request tracking
+- Optional disabled or in-memory request tracking
 - Health, readiness, status, reset, answer, and voting endpoints
 - Unit and integration tests that do not spend provider credits
 
@@ -54,7 +54,6 @@ Routes, services, tests, and the frontend do not import provider SDKs. Only the 
 - Node.js 24 LTS
 - npm 12 or a compatible npm release
 - An API key for the selected hosted provider, unless using a local endpoint that does not require authentication
-- Redis 7.2 or newer only when `REQUEST_TRACKING_MODE=redis`
 
 ## Installation
 
@@ -155,10 +154,8 @@ Mock mode is useful for UI development and does not make external requests.
 | `AI_TIMEOUT_MS`                   | Maximum duration of each model call         | `30000`                 |
 | `AI_MAX_RETRIES`                  | SDK retries for transient provider failures | `2`                     |
 | `AI_CONCURRENCY`                  | Maximum concurrent generation calls         | `3`                     |
-| `REQUEST_TRACKING_MODE`           | `disabled`, `memory`, or `redis`            | `memory`                |
+| `REQUEST_TRACKING_MODE`           | `disabled` or `memory`                      | `memory`                |
 | `REQUEST_LIMIT`                   | Logical API-call budget                     | `200`                   |
-| `REDIS_URL`                       | Redis connection URL                        | none                    |
-| `COUNTER_FAILURE_MODE`            | `open` or `closed` on Redis failure         | `closed`                |
 | `ADMIN_KEY`                       | Secret for resetting the global counter     | none                    |
 | `HTTP_RATE_LIMIT`                 | Per-IP requests per window                  | `60`                    |
 | `HTTP_RATE_WINDOW_MS`             | Per-IP rate-limit window                    | `60000`                 |
@@ -184,19 +181,6 @@ The count lives in the API process and resets whenever the process restarts. Thi
 REQUEST_TRACKING_MODE=memory
 REQUEST_LIMIT=200
 ```
-
-### Redis
-
-The count is shared across API instances. A Lua script makes the consume-and-disable decision atomic.
-
-```env
-REQUEST_TRACKING_MODE=redis
-REQUEST_LIMIT=200
-REDIS_URL=redis://localhost:6379
-COUNTER_FAILURE_MODE=closed
-```
-
-`COUNTER_FAILURE_MODE=open` permits AI calls when Redis is unavailable. `closed` rejects them with `503` so cost controls cannot silently disappear.
 
 ## API
 
@@ -281,16 +265,30 @@ npm run start --workspace @ai-hunger-games/api
 
 Serve `apps/web/dist` through a static host or reverse proxy and set `VITE_API_URL` before building when the API is deployed at a different origin.
 
+## Deployment (Render)
+
+This project includes a fully configured `render.yaml` blueprint for one-click deployment to [Render](https://render.com/).
+
+The blueprint will provision:
+- A Fastify API web service
+- A static React/Vite frontend
+
+To deploy:
+1. Connect your GitHub repository to Render and create a new **Blueprint**.
+2. Render will read `render.yaml` and configure both services.
+3. Configure the `LLM_API_KEY` in the API service environment variables.
+4. Set the `VITE_API_URL` in the frontend environment variables to point to your new API URL.
+5. Add the frontend origin to the `WEB_ORIGINS` environment variable in the API service to allow CORS.
+
 ## Security notes
 
 - Do not expose `ADMIN_KEY` to the browser.
 - Keep provider keys only in the API environment.
 - Configure `WEB_ORIGINS` explicitly in production.
-- Use Redis-backed tracking for multiple API replicas.
-- Choose `COUNTER_FAILURE_MODE=closed` when the global request budget is a hard cost boundary.
 - Health responses intentionally omit API-key and connection details.
 
 ## Licence
 
 MIT. See `LICENSE` for the required notices covering the supplied source and this TypeScript rewrite.
+
 # ai-hunger-games
